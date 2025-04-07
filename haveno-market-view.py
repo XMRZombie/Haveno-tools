@@ -108,7 +108,7 @@ def update_charts():
 
         df['Payment method'] = df['Payment method'].replace({
             'Cryptocurrencies Instant': 'Cryptocurrencies',
-            'SEPA Instant': 'SEPA'
+            'SEPA Instant Payments': 'SEPA'
         })
 
         payment_method_shares = df['Payment method'].value_counts()
