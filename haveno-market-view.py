@@ -7,7 +7,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 
 
-df = pd.read_csv('trades.csv')
+df = pd.read_csv('trade-statistics-all-markets.csv')
 df['Date/Time'] = pd.to_datetime(df['Date/Time'])
 df['Amount in XMR'] = df['Amount in XMR'].astype(float)
 df['Amount'] = df['Amount'].str.extract(r'([\d\.]+)').astype(float)
