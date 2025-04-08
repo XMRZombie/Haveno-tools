@@ -1,138 +1,159 @@
 #!/usr/bin/python3
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import numpy as np
+import gc
+import time
+import os
 
+def load_data(file_path):
+    if not os.path.exists(file_path):
+        messagebox.showerror("Error", f"Data file '{file_path}' not found.")
+        return pd.DataFrame()
+    try:
+        use_cols = ['Date/Time', 'Amount in XMR', 'Amount', 'Market', 'Payment method']
+        df = pd.read_csv(file_path, usecols=use_cols)
+        df['Date/Time'] = pd.to_datetime(df['Date/Time'])
+        df['Amount in XMR'] = df['Amount in XMR'].astype(float)
+        df['Amount'] = df['Amount'].str.extract(r'([\d\.]+)').astype(float)
+        return df
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to load data: {e}")
+        return pd.DataFrame()
 
-df = pd.read_csv('trade-statistics-all-markets.csv')
-df['Date/Time'] = pd.to_datetime(df['Date/Time'])
-df['Amount in XMR'] = df['Amount in XMR'].astype(float)
-df['Amount'] = df['Amount'].str.extract(r'([\d\.]+)').astype(float)
+def get_date_range(df):
+    if df.empty:
+        return None, None
+    first_date = df['Date/Time'].min().date()
+    last_date = df['Date/Time'].max().date()
+    return first_date, last_date
 
+def create_main_window():
+    root = tk.Tk()
+    root.title("Haveno stats")
+    return root
 
-df['Date'] = df['Date/Time'].dt.date
-daily_df = df.groupby('Date').agg({
-    'Amount in XMR': 'sum',
-    'Price': 'mean',
-    'Market': 'count'
-}).reset_index()
+def create_notebook(root):
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill='both', expand=True)
+    return notebook
 
+def create_market_share_tab(notebook, df, first_date, last_date):
+    market_share_tab = ttk.Frame(notebook)
+    notebook.add(market_share_tab, text='Market Share')
 
-root = tk.Tk()
-root.title("Haveno stats")
-
-
-notebook = ttk.Notebook(root)
-notebook.pack(fill='both', expand=True)
-
-
-volume_tab = ttk.Frame(notebook)
-market_share_tab = ttk.Frame(notebook)
-
-notebook.add(volume_tab, text='Volume Charts')
-notebook.add(market_share_tab, text='Market Share')
-
-
-volume_figure = plt.Figure(figsize=(10, 5), dpi=100)
-volume_ax = volume_figure.add_subplot(111)
-volume_ax.set_title('Daily Volume Charts')
-
-
-market_share_figure = plt.Figure(figsize=(10, 5), dpi=100)
-currency_share_ax = market_share_figure.add_subplot(121)
-currency_share_ax.set_title('Currency Share')
-payment_method_share_ax = market_share_figure.add_subplot(122)
-payment_method_share_ax.set_title('Payment Method Share')
-
-
-timeframe_label = tk.Label(volume_tab, text="Select Timeframe:")
-timeframe_label.pack()
-timeframe_var = tk.StringVar(value="Daily")
-timeframe_menu = ttk.Combobox(volume_tab, textvariable=timeframe_var)
-timeframe_menu['values'] = ('Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly')
-timeframe_menu.pack()
-
-def update_charts():
-    timeframe = timeframe_var.get()
-
-    if timeframe == 'Daily':
-        aggregated_df = daily_df.copy()
-        aggregated_df['Date/Time'] = pd.to_datetime(aggregated_df['Date'])
-    elif timeframe == 'Weekly':
-        aggregated_df = df.resample('W', on='Date/Time').agg({
-            'Amount in XMR': 'sum',
-            'Price': 'mean',
-            'Market': 'count'
-        }).reset_index()
-    elif timeframe == 'Monthly':
-        aggregated_df = df.resample('M', on='Date/Time').agg({
-            'Amount in XMR': 'sum',
-            'Price': 'mean',
-            'Market': 'count'
-        }).reset_index()
-    elif timeframe == 'Quarterly':
-        aggregated_df = df.resample('Q', on='Date/Time').agg({
-            'Amount in XMR': 'sum',
-            'Price': 'mean',
-            'Market': 'count'
-        }).reset_index()
-    elif timeframe == 'Yearly':
-        aggregated_df = df.resample('Y', on='Date/Time').agg({
-            'Amount in XMR': 'sum',
-            'Price': 'mean',
-            'Market': 'count'
-        }).reset_index()
-
-    volume_ax.clear()
-    volume_ax.set_title(f'{timeframe} Volume Charts')
-    volume_ax.bar(aggregated_df.index, aggregated_df['Amount in XMR'], label='XMR Volume', alpha=0.6)
-    volume_ax.set_xlabel('Date')
-    volume_ax.set_ylabel('Volume (XMR)')
-    volume_ax.legend()
-    volume_canvas.draw()
-
-
-    currency_share_ax.clear()
+    market_share_figure = plt.Figure(figsize=(10, 5), dpi=100)
+    currency_share_ax = market_share_figure.add_subplot(121)
     currency_share_ax.set_title('Currency Share')
-    currency_shares = df['Market'].value_counts()
-    currency_share_ax.pie(currency_shares, labels=currency_shares.index, autopct='%1.1f%%', startangle=140)
-
-    payment_method_share_ax.clear()
+    payment_method_share_ax = market_share_figure.add_subplot(122)
     payment_method_share_ax.set_title('Payment Method Share')
 
+    start_date_label = tk.Label(market_share_tab, text=f"From: {first_date if first_date else 'N/A'}")
+    start_date_label.pack()
 
-    if 'Payment method' in df.columns:
+    end_date_label = tk.Label(market_share_tab, text=f"To: {last_date if last_date else 'N/A'}")
+    end_date_label.pack()
 
-        df['Payment method'] = df['Payment method'].replace({
-            'Cryptocurrencies Instant': 'Cryptocurrencies',
-            'SEPA Instant Payments': 'SEPA'
-        })
+    total_volume_label = tk.Label(market_share_tab, text="Total Volume in XMR: ")
+    total_volume_label.pack()
 
-        payment_method_shares = df['Payment method'].value_counts()
+    market_share_canvas = FigureCanvasTkAgg(market_share_figure, market_share_tab)
+    market_share_canvas.get_tk_widget().pack(fill='both', expand=True)
 
-        if not payment_method_shares.empty:
-            payment_method_share_ax.pie(payment_method_shares, labels=payment_method_shares.index, autopct='%1.1f%%', startangle=140)
+    annotation = None
+    currency_wedges = []
+    payment_wedges = []
+    last_hover_time = 0
+    debounce_interval = 0.1  # 100 ms debounce interval
+    background = None
+
+    def update_charts():
+        nonlocal annotation, currency_wedges, payment_wedges, background
+        if df.empty:
+            messagebox.showwarning("Warning", "No data available to display charts.")
+            return
+
+        total_volume_xmr = df['Amount in XMR'].sum()
+        total_volume_label.config(text=f"Total Volume in XMR: {total_volume_xmr:.2f}")
+
+        currency_shares = df['Market'].value_counts()
+        payment_method_shares = df['Payment method'].value_counts() if 'Payment method' in df.columns else pd.Series()
+
+        currency_wedges = create_pie_chart(currency_share_ax, currency_shares, 'Currency Share')
+        payment_wedges = create_pie_chart(payment_method_share_ax, payment_method_shares, 'Payment Method Share')
+
+        # Cache the background
+        market_share_canvas.draw()
+        background = market_share_canvas.copy_from_bbox(market_share_figure.bbox)
+
+        def on_hover(event):
+            nonlocal annotation, last_hover_time
+            current_time = time.time()
+            if current_time - last_hover_time < debounce_interval:
+                return
+            last_hover_time = current_time
+
+            remove_annotation()
+            if event.inaxes == currency_share_ax:
+                handle_hover(event, currency_wedges, currency_shares, currency_share_ax)
+            elif event.inaxes == payment_method_share_ax:
+                handle_hover(event, payment_wedges, payment_method_shares, payment_method_share_ax)
+
+        def remove_annotation():
+            nonlocal annotation
+            if annotation:
+                annotation.remove()
+                annotation = None
+                market_share_canvas.restore_region(background)
+                market_share_canvas.blit(market_share_figure.bbox)
+
+        def on_resize(event):
+            nonlocal background
+            market_share_canvas.draw()
+            background = market_share_canvas.copy_from_bbox(market_share_figure.bbox)
+
+        market_share_figure.canvas.mpl_connect('motion_notify_event', on_hover)
+        market_share_figure.canvas.mpl_connect('resize_event', on_resize)
+        market_share_canvas.draw()
+        gc.collect()
+
+    def create_pie_chart(ax, shares, title):
+        if shares.empty:
+            ax.clear()
+            ax.set_title(title)
+            ax.text(0.5, 0.5, 'No Data', ha='center', va='center', fontsize=12)
+            return []
         else:
-            payment_method_share_ax.text(0.5, 0.5, 'No Payment Method Data', ha='center', va='center', fontsize=12)
-    else:
-        payment_method_share_ax.text(0.5, 0.5, 'No Payment Method Data', ha='center', va='center', fontsize=12)
+            wedges, _, _ = ax.pie(shares, labels=shares.index, autopct='%1.1f%%', startangle=140)
+            ax.set_title(title)
+            return wedges
 
-    market_share_canvas.draw()
+    def handle_hover(event, wedges, shares, ax):
+        nonlocal annotation
+        for wedge in wedges:
+            if wedge.contains(event)[0]:
+                label = wedge.get_label()
+                percentage = shares[label] / shares.sum() * 100
+                annotation = ax.annotate(f'{label}: {percentage:.2f}%', xy=(event.xdata, event.ydata), xycoords='data',
+                                         xytext=(0, 30), textcoords='offset points',
+                                         arrowprops=dict(arrowstyle="->"),
+                                         bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="lightyellow"))
+                market_share_canvas.restore_region(background)
+                ax.draw_artist(annotation)
+                market_share_canvas.blit(market_share_figure.bbox)
+                break
 
-update_button = tk.Button(volume_tab, text="Update Charts", command=update_charts)
-update_button.pack()
+    update_charts()
 
+def main():
+    df = load_data('trades.csv')
+    first_date, last_date = get_date_range(df)
+    root = create_main_window()
+    notebook = create_notebook(root)
+    create_market_share_tab(notebook, df, first_date, last_date)
+    root.mainloop()
 
-volume_canvas = FigureCanvasTkAgg(volume_figure, volume_tab)
-volume_canvas.draw()
-volume_canvas.get_tk_widget().pack(fill='both', expand=True)
-
-market_share_canvas = FigureCanvasTkAgg(market_share_figure, market_share_tab)
-market_share_canvas.draw()
-market_share_canvas.get_tk_widget().pack(fill='both', expand=True)
-
-# Run the application
-root.mainloop()
+if __name__ == "__main__":
+    main()
