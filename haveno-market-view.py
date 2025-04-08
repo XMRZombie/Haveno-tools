@@ -148,7 +148,7 @@ def create_market_share_tab(notebook, df, first_date, last_date):
     update_charts()
 
 def main():
-    df = load_data('trades.csv')
+    df = load_data('trade-statistics-all-markets.csv')
     first_date, last_date = get_date_range(df)
     root = create_main_window()
     notebook = create_notebook(root)
