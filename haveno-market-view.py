@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -24,7 +24,7 @@ class HavenoStatsApp:
         self.background = None
         self.last_hover_time = 0
         self.debounce_interval = 0.1  # 100 ms debounce interval
-        
+
         self.create_ui()
         self.load_data_and_update_ui()
 
@@ -175,7 +175,7 @@ class HavenoStatsApp:
                 label = wedge.get_label()
                 percentage = column_data.value_counts()[label] / column_data.value_counts().sum() * 100
                 total_xmr = self.df[self.df[column_data.name] == label]['Amount in XMR'].sum()
-                self.annotation = ax.annotate(f'{label}: {percentage:.2f}%\nTotal XMR: {total_xmr:.2f}', 
+                self.annotation = ax.annotate(f'{label}: {percentage:.2f}%\nTotal XMR: {total_xmr:.2f}',
                                               xy=(event.xdata, event.ydata), xycoords='data',
                                               xytext=(0, 30), textcoords='offset points',
                                               arrowprops=dict(arrowstyle="->"),
@@ -202,7 +202,14 @@ def cleanup():
 
 def main():
     root = tk.Tk()
-    app = HavenoStatsApp(root, 'trade-statistics-all-markets.csv')
+
+    # Open file dialog to select the CSV file
+    file_path = filedialog.askopenfilename(title="Select CSV file containing market stats", filetypes=[("CSV Files", "*.csv")])
+    if not file_path:
+        messagebox.showerror("Error", "No file selected.")
+        return
+
+    app = HavenoStatsApp(root, file_path)
 
     # Register cleanup function on exit
     atexit.register(cleanup)
